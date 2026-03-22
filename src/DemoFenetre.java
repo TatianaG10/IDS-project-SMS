@@ -44,7 +44,7 @@ public class DemoFenetre implements Runnable {
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
 		// On fixe la taille et on demarre
-		frame.setSize(500, 300);
+		frame.setSize(600, 600);
 		frame.setVisible(true);
 	}
 

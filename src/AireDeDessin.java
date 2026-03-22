@@ -54,9 +54,9 @@ class AireDeDessin extends JComponent {
 		counter = 1;
 
 			antennas.add(new Antenna("A1", 120, 120));   // top-left
-			antennas.add(new Antenna("A2", 380, 120));   // top-right
-			antennas.add(new Antenna("A3", 120, 180));   // bottom-left
-			antennas.add(new Antenna("A4", 380, 180));   // bottom-right
+			antennas.add(new Antenna("A2", 340, 120));   // top-right
+			antennas.add(new Antenna("A3", 120, 340));   // bottom-left
+			antennas.add(new Antenna("A4", 340, 340));   // bottom-right
 	}
 
 
