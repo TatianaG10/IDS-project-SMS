@@ -30,11 +30,15 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.InputStream;
 import java.io.FileInputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 class AireDeDessin extends JComponent {
 	int counter;
 	Image img;
 	Point center;
+
+	private List<Antenna> antennas = new ArrayList<>();
 
 
 	public AireDeDessin() {
@@ -48,6 +52,11 @@ class AireDeDessin extends JComponent {
 			System.exit(1);
 		}
 		counter = 1;
+
+			antennas.add(new Antenna("A1", 120, 120));   // top-left
+			antennas.add(new Antenna("A2", 380, 120));   // top-right
+			antennas.add(new Antenna("A3", 120, 180));   // bottom-left
+			antennas.add(new Antenna("A4", 380, 180));   // bottom-right
 	}
 
 
@@ -75,6 +84,13 @@ class AireDeDessin extends JComponent {
 
 		// On efface tout
 		drawable.clearRect(0, 0, width, height);
+
+
+		for (Antenna antenna : antennas) {
+            antenna.draw(g);
+        }
+
+
 
 		// On affiche une petite image au milieu
 		drawable.drawImage(img, center.x-20, center.y-20, 40, 40, null);
