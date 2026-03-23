@@ -74,4 +74,13 @@ public class Antenna {
     public String getId()      { return id; }
     public Point getPosition() { return position; }
     public int getRadius()     { return radius; }
+
+    // function to calculate distance between self and neighbours
+    public Double eucledianDistance(Antenna potentialNeighbour){
+
+        Point neighbourPoss = potentialNeighbour.getPosition();
+        Point ourPoss = this.getPosition();
+        Double distance = Math.sqrt((ourPoss.x)*(neighbourPoss.x) + (ourPoss.y)*(neighbourPoss.y));
+        return distance;
+    }
 }
