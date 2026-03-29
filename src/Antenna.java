@@ -1,86 +1,98 @@
-import javax.imageio.ImageIO;
-import java.awt.*;
-import java.io.FileInputStream;
-import java.io.InputStream;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import java.awt.Point;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Antenna {
 
+    // Physical properties
     private String id;
     private Point position;
-    private int radius;
-    private Image img;
-    private Map<String, User> connectedUsers = new HashMap<>();
+    private int radius = 120; // coverage radius
+    private Map<String, User> connectedUsers = new ConcurrentHashMap<>(); // concurrent for thread safety
 
-    public Antenna(String id, int x, int y) {
-        this.id = id;
-        this.position = new Point(x, y);
-        this.radius = 120;
+    // Network properties
+    private String rightNeighborId; 
+    private final Connection connection;
+    private final Channel channel;
+    private final String exchangeName = "antenna_ring_exchange";
+    private final String masterExchange = "master_broadcast_exchange";
 
-        try {
-            InputStream in = new FileInputStream("Images/antenna.png");
-            img = ImageIO.read(in);
-        } catch (Exception e) {
-            System.err.println("Cannot load antenna image");
-            System.exit(1);
+    public Antenna(String id, int x, int y, Connection connection, String rightNeighborId) throws Exception {
+            this.id = id;
+            this.position = new Point(x, y);
+            this.connection = connection;
+            this.rightNeighborId = rightNeighborId; 
+            
+            this.channel = connection.createChannel();
+            this.channel.exchangeDeclare(exchangeName, "direct");
+            this.channel.exchangeDeclare(masterExchange, "fanout"); 
+            
+            String queueName = "antenna_queue_" + id;
+            this.channel.queueDeclare(queueName, false, false, false, null);
+            this.channel.queueBind(queueName, exchangeName, "antenna." + id);
+
+
+            listenForMessages(queueName);
+        }
+
+    private void listenForMessages(String queueName) throws Exception {
+        channel.basicConsume(queueName, true, (consumerTag, delivery) -> {
+            Message msg = Message.deserialize(delivery.getBody());
+            handleIncomingMessage(msg);
+        }, consumerTag -> {});
+    }
+
+    
+    public void sendRight(Message msg) throws Exception {
+
+        String routingKey = "antenna." + rightNeighborId;
+
+        byte[] data = msg.serialize(); 
+        
+        channel.basicPublish(exchangeName, routingKey, null, data);
+        System.out.println("Antenna " + id + " forwarded message to " + rightNeighborId);
+    }
+
+
+    public void sendToMaster(Message msg) throws Exception {
+        System.out.println("User offline. Sending to Master Antenna storage.");
+        channel.basicPublish(masterExchange, "", null, msg.serialize());
+    }
+
+
+    private void handleIncomingMessage(Message msg) throws Exception {
+
+        // Case 1: User is connected to THIS antenna
+        if (connectedUsers.containsKey(msg.getReceiverId())) {
+            deliverToUser(msg);
+        } 
+        // Case 2: Message has circled the entire ring (Loop Detection)
+        else if (msg.getOriginalAntennaId().equals(this.id)) {
+            sendToMaster(msg);
+        } 
+        // Case 3: User not here, send to neighbor
+        else {
+            sendRight(msg);
         }
     }
 
-    public void draw(Graphics g) {
-        Graphics2D g2d = (Graphics2D) g;
 
-        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        // Filled translucent circle
-        g2d.setColor(new Color(55, 138, 221, 40));
-        g2d.fillOval(position.x - radius, position.y - radius, radius * 2, radius * 2);
-
-        // Dashed border
-        float[] dash = {6f, 4f};
-        g2d.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, dash, 0f));
-        g2d.setColor(new Color(55, 138, 221, 160));
-        g2d.drawOval(position.x - radius, position.y - radius, radius * 2, radius * 2);
-
-        // Reset stroke, draw icon and label
-        g2d.setStroke(new BasicStroke(1f));
-        if (img != null) {
-            g2d.drawImage(img, position.x - 20, position.y - 20, 40, 40, null);
-        }
-        g2d.setColor(new Color(24, 95, 165));
-        g2d.setFont(new Font("SansSerif", Font.BOLD, 11));
-        g2d.drawString(id, position.x - 8, position.y + 34);
-    }
-
-    public void moveTo(int x, int y) {
-        this.position = new Point(x, y);
-    }
-
-    public void registerUser(User user) {
-        connectedUsers.put(user.getId(), user);
-    }
-
-    public void deregisterUser(User user) {
-        connectedUsers.remove(user.getId());
+    // To calculate distance to a user for connection purposes
+    public double euclideanDistance(Point otherPos) {
+        return Math.sqrt(Math.pow(this.position.x - otherPos.x, 2) + 
+                         Math.pow(this.position.y - otherPos.y, 2));
     }
 
     public void deliverToUser(Message msg) {
         User user = connectedUsers.get(msg.getReceiverId());
         if (user != null) {
-            // deliver msg to user
+            System.out.println("Delivering locally to user: " + user.getId());
         }
     }
 
-    public String getId()      { return id; }
+    public String getId() { return id; }
     public Point getPosition() { return position; }
-    public int getRadius()     { return radius; }
-
-    // function to calculate distance between self and neighbours
-    public Double eucledianDistance(Antenna potentialNeighbour){
-
-        Point neighbourPoss = potentialNeighbour.getPosition();
-        Point ourPoss = this.getPosition();
-        Double distance = Math.sqrt((ourPoss.x)*(neighbourPoss.x) + (ourPoss.y)*(neighbourPoss.y));
-        return distance;
-    }
 }
