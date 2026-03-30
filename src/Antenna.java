@@ -1,98 +1,117 @@
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.*;
 import java.awt.Point;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Antenna {
 
-    // Physical properties
     private String id;
-    private Point position;
-    private int radius = 120; // coverage radius
-    private Map<String, User> connectedUsers = new ConcurrentHashMap<>(); // concurrent for thread safety
+    private Point  position;
+    private int    radius = 120;
+    private Map<String, User> connectedUsers = new ConcurrentHashMap<>();
 
-    // Network properties
-    private String rightNeighborId; 
-    private final Connection connection;
-    private final Channel channel;
-    private final String exchangeName = "antenna_ring_exchange";
+    private String     rightNeighborId;
+    private int        ringSize;           // ADD THIS — needed for hop count check
+    private Connection connection;
+    private Channel    channel;
+
+    private final String exchangeName  = "antenna_ring_exchange";
     private final String masterExchange = "master_broadcast_exchange";
+    private final String masterQueue    = "master_storage_queue";
 
-    public Antenna(String id, int x, int y, Connection connection, String rightNeighborId) throws Exception {
-            this.id = id;
-            this.position = new Point(x, y);
-            this.connection = connection;
-            this.rightNeighborId = rightNeighborId; 
-            
-            this.channel = connection.createChannel();
-            this.channel.exchangeDeclare(exchangeName, "direct");
-            this.channel.exchangeDeclare(masterExchange, "fanout"); 
-            
-            String queueName = "antenna_queue_" + id;
-            this.channel.queueDeclare(queueName, false, false, false, null);
-            this.channel.queueBind(queueName, exchangeName, "antenna." + id);
-            this.channel.queueBind(queueName, masterExchange, "antenna." + id);
+    public Antenna(String id, int x, int y, Connection connection,
+                   String rightNeighborId, int ringSize) throws Exception {
+        this.id              = id;
+        this.position        = new Point(x, y);
+        this.connection      = connection;
+        this.rightNeighborId = rightNeighborId;
+        this.ringSize        = ringSize;           // store it
 
-            listenForMessages(queueName);
-        }
+        this.channel = connection.createChannel();
+        this.channel.exchangeDeclare(exchangeName,  "direct");
+        this.channel.exchangeDeclare(masterExchange, "fanout");
+
+        String queueName = "antenna_queue_" + id;
+        this.channel.queueDeclare(queueName, false, false, false, null);
+        this.channel.queueBind(queueName, exchangeName,   "antenna." + id);
+        this.channel.queueBind(queueName, masterExchange, "antenna." + id);
+
+        listenForMessages(queueName);
+        System.out.println("[Antenna " + id + "] Ready at (" + x + "," + y + ")");
+    }
 
     private void listenForMessages(String queueName) throws Exception {
         channel.basicConsume(queueName, true, (consumerTag, delivery) -> {
-            Message msg = Message.deserialize(delivery.getBody());
-            handleIncomingMessage(msg);
+            try {
+                Message msg = Message.deserialize(delivery.getBody());
+                handleIncomingMessage(msg);
+            } catch (Exception e) { e.printStackTrace(); }
         }, consumerTag -> {});
     }
 
-    
-    public void sendRight(Message msg) throws Exception {
-
-        String routingKey = "antenna." + rightNeighborId;
-
-        byte[] data = msg.serialize(); 
-        
-        channel.basicPublish(exchangeName, routingKey, null, data);
-        System.out.println("Antenna " + id + " forwarded message to " + rightNeighborId);
+    // Called when a User's keepalive reaches us and they aren't registered yet
+    // Adds them to our local map so we can deliver messages to them
+    public void connectUser(User user) {
+        connectedUsers.put(user.getId(), user);
+        System.out.println("[Antenna " + id + "] User " + user.getId() + " connected");
     }
 
-
-    public void sendToMaster(Message msg) throws Exception {
-        System.out.println("User offline. Sending to Master Antenna storage.");
-        channel.basicPublish(masterExchange, "", null, msg.serialize());
+    // Called when a User's keepalive stops (they moved away or disconnected)
+    public void disconnectUser(String userId) {
+        connectedUsers.remove(userId);
+        System.out.println("[Antenna " + id + "] User " + userId + " disconnected");
     }
-
 
     private void handleIncomingMessage(Message msg) throws Exception {
 
-        // Case 1: User is connected to THIS antenna
+        // Case 1: receiver is connected to THIS antenna → deliver directly
         if (connectedUsers.containsKey(msg.getReceiverId())) {
             deliverToUser(msg);
-        } 
-        // Case 2: Message has circled the entire ring (Loop Detection)
-        else if (msg.getOriginalAntennaId().equals(this.id)) {
+
+        // Case 2: message has visited every antenna → receiver is offline
+        // FIX: use hopCount instead of comparing antenna IDs
+        } else if (msg.hopCount >= ringSize) {
             sendToMaster(msg);
-        } 
-        // Case 3: User not here, send to neighbor
-        else {
+
+        // Case 3: keep forwarding around the ring
+        } else {
             sendRight(msg);
         }
     }
 
+    public void sendRight(Message msg) throws Exception {
+        msg.hopCount++;                              // increment before forwarding
+        msg.previousAntennaId = this.id;            // track where it came from
 
-    // To calculate distance to a user for connection purposes
-    public double euclideanDistance(Point otherPos) {
-        return Math.sqrt(Math.pow(this.position.x - otherPos.x, 2) + 
-                         Math.pow(this.position.y - otherPos.y, 2));
+        channel.basicPublish(exchangeName, "antenna." + rightNeighborId,
+                             null, msg.serialize());
+        System.out.println("[Antenna " + id + "] Forwarded to " + rightNeighborId
+                           + " (hop " + msg.hopCount + ")");
+    }
+
+    public void sendToMaster(Message msg) throws Exception {
+        System.out.println("[Antenna " + id + "] Receiver offline, sending to master");
+        channel.basicPublish(masterExchange, "", null, msg.serialize());
     }
 
     public void deliverToUser(Message msg) {
         User user = connectedUsers.get(msg.getReceiverId());
         if (user != null) {
-            System.out.println("Delivering locally to user: " + user.getId());
+            System.out.println("[Antenna " + id + "] Delivered \""
+                + msg.getContent() + "\" to " + user.getId());
         }
     }
 
-    public String getId() { return id; }
-    public Point getPosition() { return position; }
+    public double euclideanDistance(Point otherPos) {
+        return Math.sqrt(Math.pow(this.position.x - otherPos.x, 2) +
+                         Math.pow(this.position.y - otherPos.y, 2));
+    }
+
+    public boolean isInRange(Point userPos) {
+        return euclideanDistance(userPos) <= radius;
+    }
+
+    public String getId()       { return id; }
+    public Point  getPosition() { return position; }
+    public Channel getChannel() { return channel; }
 }
