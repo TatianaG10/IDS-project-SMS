@@ -15,7 +15,7 @@ public class User {
 
     public void connect(Antenna antenna) {
         this.connectedAntenna = antenna;
-        antenna.registerUser(this);
+        antenna.registerUser(this); 
     }
 
     public void sendMessage(String receiverId, String content) {

@@ -8,13 +8,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MasterAntenna {
 
-private Map<String, List<Message>> storage = new ConcurrentHashMap<>();
+    // <ReceiverId, Message> => any undelivered msg will be stored in storage hashmap 
+    private Map<String, List<Message>> storage = new ConcurrentHashMap<>();
     
     private final Connection connection;
     private final Channel channel;
     private final String masterExchange = "master_broadcast_exchange";
     private final String storageQueue = "master_storage_queue";
-
 
 
     public MasterAntenna(Connection connection) throws Exception {
@@ -26,9 +26,6 @@ private Map<String, List<Message>> storage = new ConcurrentHashMap<>();
             
             // Setup the queue to receive looped messages from antennas
             this.channel.queueDeclare(storageQueue, false, false, false, null);
-            
-            // Start listening for messages to store
-            listenForLoopedMessages();
         }
 
     public String sendAll(){
@@ -38,7 +35,19 @@ private Map<String, List<Message>> storage = new ConcurrentHashMap<>();
         return "Message stored in MasterAntenna: " + msg.getContent();}
     
     
+    private void handleMessage(Message msg) throws Exception {
+        // 1. we store message that has not been delivered 
+        if (msg.type == MessageType.MESSAGE) {
+            storeMessage(msg);
+        } 
+    }
 
+    public void start() throws Exception {
+        channel.basicConsume(masterQueue, true, (tag, delivery) -> {
+            try { handleMessage(delivery); } catch (Exception e) { e.printStackTrace(); }
+        }, tag -> {});
 
+        System.out.println("[Master] Ready");
+    }
     
 }
