@@ -33,7 +33,7 @@ public class Antenna {
             String queueName = "antenna_queue_" + id;
             this.channel.queueDeclare(queueName, false, false, false, null);
             this.channel.queueBind(queueName, exchangeName, "antenna." + id);
-
+            this.channel.queueBind(queueName, masterExchange, "antenna." + id);
 
             listenForMessages(queueName);
         }
