@@ -1,81 +1,10 @@
-MY_VAT_TAT="/home/tatiana/School/M1-mosig/IDS/IDS-chat-app"
-MY_VAR_AND="/home/andy/Documents/Workspace/Distributed_system/IDS-chat-app"
-MY_VAR=$MY_VAT_TAT
+javac -cp "lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" -d class src/*.java
 
-export CLASSPATH="$MY_VAR/lib/Chat.jar:$MY_VAR/lib/Chat_itf.jar:$MY_VAR/lib/ChatDiscussion.jar:$MY_VAR/lib/ChatDiscussion_itf.jar:$MY_VAR/lib/ChatClientList.jar:$MY_VAR/lib/ChatClientList_itf.jar:$MY_VAR/lib/ClientInfo.jar:$MY_VAR/lib/ClientInfo_itf.jar:$MY_VAR/lib/ChatClientDisplay.jar:$MY_VAR/lib/ChatMessage.jar"
+# Antennas (each in a separate terminal)
+java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" Antenna A 100 100 B
+java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" Antenna B 300 100 C
+java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" Antenna C 200 300 A
 
-# Compiling 
-
-javac -d classes -classpath .:classes src/ChatMessage.java
-cd classes
-jar cvf ../lib/ChatMessage.jar ChatMessage.class
-cd ../
-
-javac -d classes -classpath .:classes src/ClientInfo_itf.java
-cd classes
-jar cvf ../lib/ClientInfo_itf.jar ClientInfo_itf.class
-cd ../
-
-javac -d classes -classpath .:classes src/ClientInfo.java
-cd classes
-jar cvf ../lib/ClientInfo.jar ClientInfo.class
-cd ../
-
-javac -d classes -classpath .:classes src/ChatClientList_itf.java
-cd classes
-jar cvf ../lib/ChatClientList_itf.jar ChatClientList_itf.class
-cd ../
-
-javac -d classes -classpath .:classes src/ChatClientList.java
-cd classes
-jar cvf ../lib/ChatClientList.jar ChatClientList.class
-cd ../
-
-javac -d classes -classpath .:classes src/ChatDiscussion_itf.java
-cd classes
-jar cvf ../lib/ChatDiscussion_itf.jar ChatDiscussion_itf.class
-cd ../
-
-javac -d classes -classpath .:classes src/ChatDiscussion.java
-cd classes
-jar cvf ../lib/ChatDiscussion.jar ChatDiscussion.class
-cd ../
-
-javac -d classes -classpath .:classes src/Chat_itf.java
-cd classes
-jar cvf ../lib/Chat_itf.jar Chat_itf.class
-cd ../
-
-javac -d classes -classpath .:classes src/Chat.java
-cd classes
-jar cvf ../lib/Chat.jar Chat.class
-cd ../
-
-javac -d classes -classpath .:classes src/ChatServer.java
-cd classes
-jar cvf ../lib/ChatServer.jar ChatServer.class
-cd ../
-
-javac -d classes -classpath .:classes src/ChatClientDisplay.java
-cd classes
-jar cvf ../lib/ChatClientDisplay.jar ChatClientDisplay.class
-cd ../
-
-javac -d classes -classpath .:classes src/ChatClient.java
-cd classes
-jar cvf ../lib/ChatClient.jar ChatClient.class
-cd ../
-
-javac -d classes -cp .:classes:lib/Chat.jar:lib/Chat_itf.jar:lib/ChatDiscussion.jar:lib/ChatDiscussion_itf.jar:lib/ChatClientList.jar:lib/ChatClientList_itf.jar src/ChatServer.java
-
-javac -d classes -cp .:classes:lib/ClientInfo.jar:lib/ClientInfo_itf.jar:lib/Chat_itf.jar:lib/ChatClientDisplay.jar:lib/ChatMessage src/ChatClient.java
-
-# cd ../
-# Lauching rmi, sever and client 
-
-# rmiregistry &
-
-# java -classpath .:classes:lib/Chat.jar:lib/Chat_itf.jar:lib/ChatDiscussion.jar:lib/ChatDiscussion_itf.jar:lib/ChatClientList.jar:lib/ChatClientList_itf.jar ChatServer
-
-# java -classpath .:classes:lib/ClientInfo.jar:lib/ClientInfo_itf.jar:lib/Chat_itf.jar:lib/ChatClientDisplay.jar:lib/ChatMessage.jar ChatClient Andy localhost
-
+# Users (each in a separate terminal)
+java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" User alice 110 110
+java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" User bob 290 110
