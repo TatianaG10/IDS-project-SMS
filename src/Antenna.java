@@ -18,6 +18,8 @@ public class Antenna {
     private final Connection connection;
     private final Channel channel;
     private final String exchangeName = "antenna_ring_exchange";
+    private final String exchangeUserName = "antenna_user_exchange";
+    private final String exchangeBroadcastUsername = "user_broadcast_exchange";
     private final String masterExchange = "master_broadcast_exchange";
 
     public Antenna(String id, int x, int y, Connection connection, String rightNeighborId) throws Exception {
@@ -28,11 +30,15 @@ public class Antenna {
             
             this.channel = connection.createChannel();
             this.channel.exchangeDeclare(exchangeName, "direct");
+            this.channel.exchangeDeclare(exchangeUserName, "direct");
+            this.channel.exchangeDeclare(exchangeBroadcastUsername, "fanout");
             this.channel.exchangeDeclare(masterExchange, "fanout"); 
             
             String queueName = "antenna_queue_" + id;
             this.channel.queueDeclare(queueName, false, false, false, null);
             this.channel.queueBind(queueName, exchangeName, "antenna." + id);
+            this.channel.queueBind(queueName, exchangeUserName, "antenna." + id);
+            this.channel.queueBind(queueName, exchangeBroadcastUsername, "antenna." + id);
             this.channel.queueBind(queueName, masterExchange, "antenna." + id);
 
             listenForMessages(queueName);
