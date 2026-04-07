@@ -89,13 +89,12 @@ public class User {
         this.channel.basicPublish(exchangeBroadcastUserName, null, null, data);
         System.out.println("User " + id + " sent message to antenna " + connectedAntenna.getId());
     }
-
+x
     public void receiveMessage(String queueName) {
         this.channel.basicConsume(queueName, true, (consumerTag, delivery) -> {
             Message message = Message.deserialize(delivery.getBody());
 
             // Case 1 : We receive a message about an antenna replying to our CONNECT message
-
             // Case 2 : We receive a message that was for us
 
             System.out.println("[" + id + "] Received from " +

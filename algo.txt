@@ -1,0 +1,58 @@
+====================== User algo upon receiving a message: ======================
+
+Message_t WANT_TO_CONNECT
+Message_t CONNECT_TO
+Message_t ANTENNA_REPLY_CONNECT
+Message_t CHECK_CONNEXION
+Message_t CONNEXION_OK
+Message_t MESSAGE
+
+boolean trying_to_connect = false
+boolean connected = false
+
+// Rule 1 : We have a new user, so this user want to connect to an antenna
+Manual_starting* ? && !trying_to_connect => out_brodcast_user_antennas ! WANT_TO_CONNECT(id);
+                                          trying_to_connect = true;
+
+// Rule 2 : We get a reply from an antenna that want to connect to this user, and we want to wait for more replies to connect to the closest 
+// antenna
+in ? ANTENNA_REPLY_CONNECT && num_antenna_replies < 2 => antenna_replies = antennas_replies + [in];
+                                                         antenna_replied = antenna_replied + 1;
+
+// Rule 3 : We get a reply from an antenna that want to connect to this user, and we connect to the closest one, specifying to all other antennas
+// that we are already connected to an antenna
+in ? ANTENNA_REPLY_CONNEXT && num_antenna_replies == 2 => connected_to = min**(antenna_replies);
+                                                          out_broadcast_user_antennas ! CONNECT_TO(id, connected_to);
+                                                          trying_tonnect = false;
+                                                          connected = true;
+
+// Rule 4 : This user want to send a message to another user, and is currently connected to an antenna, so this user send
+// the message to that antenna
+Send_msg(content, to)*** ? && connected => connected_to ? MESSAGE(content, to);
+
+// Rule 5 : This user want to send a message to another user, but is currently not connected to an antenna, so the message is
+// not sent and we start the connexion process again.
+Send_msg(content, to)*** ? && !connected && !trying_to_connect => out_broadcast_antenna ! WANT_TO_CONNECT(id);
+                                            trying_to_connect = true;
+
+// Rule 6 : This user tries to send a message, but is also waiting for an antenna to reply to its connexion request, so
+// the message is not sent
+Send_msg(content, to)*** ? && !connected && trying_to_connect => ;
+
+Rq : In a separate thread, we will periodically send a CHECK_CONNEXION message and wait to receive the corresponding CONNEXION_OK message.
+If we don't receive it at in time or we don't receve at all, we assume that the connexion is lost and we try to connect again
+Here is the corresponding part of the algorithm, that will be in a different thread:
+
+// Rule 7 : 
+
+
+Rq 2 : Manual_starting and Send_msg are not per se part of the protocol too, since they do not correspond to receiving a message/Change in the data of the node.
+But they are still included in the algorithm at the top since they also trigger specific message exchange
+
+*By Manual_starting, we mean launching the User code in a terminal.
+**By min, we mean the antenna with the for which the distance is the minimum with the user.
+***By Send_msg, we mean that someone entered the content of a message as well as the id of the user to send to in the terminal
+
+====================== Antenna algo upon receiving a message: ======================
+
+====================== MasterAntenna algo upon receiving a message: ======================
