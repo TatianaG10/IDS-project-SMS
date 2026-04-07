@@ -11,17 +11,17 @@ boolean trying_to_connect = false
 boolean connected = false
 
 // Rule 1 : We have a new user, so this user want to connect to an antenna
-Manual_starting* ? && !trying_to_connect => out_brodcast_user_antennas ! WANT_TO_CONNECT(id);
+Manual_starting* ? && !trying_to_connect => out_brodcast_user_antennas ! WANT_TO_CONNECT(id, coord);
                                           trying_to_connect = true;
 
 // Rule 2 : We get a reply from an antenna that want to connect to this user, and we want to wait for more replies to connect to the closest 
 // antenna
-in ? ANTENNA_REPLY_CONNECT && num_antenna_replies < 2 => antenna_replies = antennas_replies + [in];
+in ? ANTENNA_REPLY_CONNECT(id, coord) && num_antenna_replies < 2 => antenna_replies = antennas_replies + [in];
                                                          antenna_replied = antenna_replied + 1;
 
 // Rule 3 : We get a reply from an antenna that want to connect to this user, and we connect to the closest one, specifying to all other antennas
 // that we are already connected to an antenna
-in ? ANTENNA_REPLY_CONNEXT && num_antenna_replies == 2 => connected_to = min**(antenna_replies);
+in ? ANTENNA_REPLY_CONNECT(id, coord) && num_antenna_replies == 2 => connected_to = min**(antenna_replies);
                                                           out_broadcast_user_antennas ! CONNECT_TO(id, connected_to);
                                                           trying_tonnect = false;
                                                           connected = true;
@@ -40,11 +40,26 @@ Send_msg(content, to)*** ? && !connected && !trying_to_connect => out_broadcast_
 Send_msg(content, to)*** ? && !connected && trying_to_connect => ;
 
 Rq : In a separate thread, we will periodically send a CHECK_CONNEXION message and wait to receive the corresponding CONNEXION_OK message.
-If we don't receive it at in time or we don't receve at all, we assume that the connexion is lost and we try to connect again
+If we don't receive it at in time or we don't receve at all, we assume that the connexion is lost and we try to connect again.
+We can implement that peart (that will be done in a different thread later), since we are considering static user for now
 Here is the corresponding part of the algorithm, that will be in a different thread:
 
-// Rule 7 : 
+// Rule 7 : When the delay for which we wait before testing the connexion again is not expired yet, we don't send any test message
+delay_message < 1 && !checking_connexion => delay_message = delay_message + (time_now - time_start);
+                                            time_start = time_now;
 
+// Rule 8 : When the delay for which we wait before testing the connexion again is expired, we send a test message
+delay_message >= 1 && !checking_connexion => conected_to ! CHECK_CONNEXION;
+                                             delay_message = 0;
+                                             checking_connexion = true;
+
+// Rule 9 : When the delay for which we wait for receiving the acknowledgement message is not yet reached, we still wait
+delay_wait_ack < 1 && checking_connexion => delay_wait_ack = delay_wait_ack + (time_now - time_start);
+                                            time_start = time_now;
+
+** TO BE COMPLETED with 2 rules for : when we are receiving the message CONNEXION_OK from the antenna under the delay or for when the delay expired
+Little problem, those 2 rules require us to subscribe to the queue, which means that they should be part of the main protocol, not the this separate thread
+execution ?
 
 Rq 2 : Manual_starting and Send_msg are not per se part of the protocol too, since they do not correspond to receiving a message/Change in the data of the node.
 But they are still included in the algorithm at the top since they also trigger specific message exchange
@@ -53,6 +68,31 @@ But they are still included in the algorithm at the top since they also trigger 
 **By min, we mean the antenna with the for which the distance is the minimum with the user.
 ***By Send_msg, we mean that someone entered the content of a message as well as the id of the user to send to in the terminal
 
+Rq 3 : The message WANT_TO_CONNECT and CONNECT_TO receive by a user (thus coming from another user) should simply be ignored (meaning that we should have an if
+condition at the top catching thos 2 types of messages and simply dropping them when we are on a user node).
+
 ====================== Antenna algo upon receiving a message: ======================
+
+Message_t WANT_TO_CONNECT
+Message_t MSG
+
+// Rule 1 : The antenna receives a request for connection from a user and it is closed enough
+in_broadcast_user_antennas ? WANT_TO_CONNECT(id, coord_user) && distance(coord_user, coord) < thereshold => user(id) ! ANTENNA_REPLY_CONNECT(id, coord);
+
+// Rule 5 : The antenna receives a request for connection from a user and it is not closed enough
+in_broadcast_user_antennas ? WANT_TO_CONNECT(id, coord_user) && distance(coord_user, coord) >= ;
+
+// Rule 2 : A user confirms us that he/she connect to that antenna, so we add it to the list of current user
+int_antenna ? CONNECT_TO(id, connected_to) && connected_to == id => user_list = user_list + id;
+
+// Rule 3 : A user confirms us that he/she connect to another antenna, so we do nothing
+in_antenna ? CONNECT_TO(id, connected_to) && connected_to != id => ;
+
+// Rule 4 : A user want to confirm that it is indeed connected to us, and it is close enough
+in CHECK_CONNEXION(id, coord_user) 
+
+** TO BE COMPLETED rule when check connecion is closed enough/is not closed enough + we want to receive a message to be sent (when the receiver is in our list, when 
+it is not and it's the first time we receive the message, and when it is not and it's the second time we receive the message (meaning that the receiver
+was not found)**
 
 ====================== MasterAntenna algo upon receiving a message: ======================
