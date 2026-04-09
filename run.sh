@@ -1,10 +1,16 @@
-javac -cp "lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" -d class src/*.java
+#!/bin/bash
 
-# Antennas (each in a separate terminal)
-java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" Antenna A 100 100 B
-java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" Antenna B 300 100 C
-java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" Antenna C 200 300 A
+# Compile everything
+echo "Compiling..."
+javac -cp "lib/*" -d class src/*.java
 
-# Users (each in a separate terminal)
-java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" User alice 110 110
-java -cp "class:lib/amqp-client-5.16.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-simple-1.7.36.jar" User bob 290 110
+if [ $? -eq 0 ]; then
+    echo "Compilation successful."
+    echo "-----------------------------------"
+    echo "To run the Master: java -cp \"class:lib/*\" MasterAntennaNode"
+    echo "To run an Antenna: java -cp \"class:lib/*\" Antenna <id> <x> <y> <neighborId>"
+    echo "To run a User:     java -cp \"class:lib/*\" User <id> <x> <y>"
+    echo "-----------------------------------"
+else
+    echo "Compilation failed."
+fi

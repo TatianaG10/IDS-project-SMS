@@ -1,104 +1,106 @@
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.*;
 import java.awt.Point;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Antenna {
-
-    // Physical properties
     private String id;
     private Point position;
-    private int radius = 120; // coverage radius
-    private Map<String, User> connectedUsers = new ConcurrentHashMap<>(); // concurrent for thread safety
+    private int radius = 120;
+    private Set<String> connectedUserIds = ConcurrentHashMap.newKeySet();
 
-    // Network properties
-    private String rightNeighborId; 
+    private String leftNeighborId; 
     private final Connection connection;
     private final Channel channel;
-    private final String exchangeName = "antenna_ring_exchange";
-    private final String exchangeUserName = "antenna_user_exchange";
-    private final String exchangeBroadcastUsername = "user_broadcast_exchange";
+    
+    private final String exchangeRing = "antenna_ring_exchange";
+    private final String exchangeUser = "antenna_user_exchange";
+    private final String exchangeBroadcast = "user_broadcast_exchange";
     private final String masterExchange = "master_broadcast_exchange";
 
-    public Antenna(String id, int x, int y, Connection connection, String rightNeighborId) throws Exception {
-            this.id = id;
-            this.position = new Point(x, y);
-            this.connection = connection;
-            this.rightNeighborId = rightNeighborId; 
-            
-            this.channel = connection.createChannel();
-            this.channel.exchangeDeclare(exchangeName, "direct");
-            this.channel.exchangeDeclare(exchangeUserName, "direct");
-            this.channel.exchangeDeclare(exchangeBroadcastUsername, "fanout");
-            this.channel.exchangeDeclare(masterExchange, "fanout"); 
-            
-            String queueName = "antenna_queue_" + id;
-            this.channel.queueDeclare(queueName, false, false, false, null);
-            this.channel.queueBind(queueName, exchangeName, "antenna." + id);
-            this.channel.queueBind(queueName, exchangeUserName, "antenna." + id);
-            this.channel.queueBind(queueName, exchangeBroadcastUsername, "antenna." + id);
-            this.channel.queueBind(queueName, masterExchange, "antenna." + id);
-
-            listenForMessages(queueName);
+    public static void main(String[] args) throws Exception {
+        if (args.length < 4) {
+            System.out.println("Usage: Antenna <id> <x> <y> <leftNeighborId>");
+            return;
         }
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost("localhost");
+        new Antenna(args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2]), 
+                    factory.newConnection(), args[3]);
+    }
+
+    public Antenna(String id, int x, int y, Connection connection, String leftNeighborId) throws Exception {
+        this.id = id;
+        this.position = new Point(x, y);
+        this.connection = connection;
+        this.leftNeighborId = leftNeighborId; 
+        
+        this.channel = connection.createChannel();
+        this.channel.exchangeDeclare(exchangeRing, "direct");
+        this.channel.exchangeDeclare(exchangeUser, "direct");
+        this.channel.exchangeDeclare(exchangeBroadcast, "fanout");
+        this.channel.exchangeDeclare(masterExchange, "fanout"); 
+        
+        String queueName = "antenna_queue_" + id;
+        this.channel.queueDeclare(queueName, false, false, false, null);
+        this.channel.queueBind(queueName, exchangeRing, "antenna." + id);
+        this.channel.queueBind(queueName, exchangeBroadcast, "");
+
+        System.out.println("Antenna " + id + " started.");
+        listenForMessages(queueName);
+    }
 
     private void listenForMessages(String queueName) throws Exception {
         channel.basicConsume(queueName, true, (consumerTag, delivery) -> {
-            Message msg = Message.deserialize(delivery.getBody());
-            handleIncomingMessage(msg);
+            // ALL checked exceptions must be caught inside this block
+            try {
+                Message msg = Message.deserialize(delivery.getBody());
+                handleIncomingMessage(msg);
+            } catch (Exception e) {
+                System.err.println("Error processing message in Antenna: " + e.getMessage());
+                e.printStackTrace();
+            }
         }, consumerTag -> {});
     }
 
-    
-    public void sendRight(Message msg) throws Exception {
-
-        String routingKey = "antenna." + rightNeighborId;
-
-        byte[] data = msg.serialize(); 
-        
-        channel.basicPublish(exchangeName, routingKey, null, data);
-        System.out.println("Antenna " + id + " forwarded message to " + rightNeighborId);
+    private void handleIncomingMessage(Message msg) throws Exception {
+        if (msg.getType() == Message.Type.WANT_TO_CONNECT) {
+            if (this.position.distance(msg.getSenderCoordinate()) <= radius) {
+                Message reply = new Message(Message.Type.ANTENNA_REPLY_CONNECT, id, msg.getSenderId(), "", position);
+                channel.basicPublish(exchangeUser, "user." + msg.getSenderId(), null, reply.serialize());
+            }
+        } 
+        else if (msg.getType() == Message.Type.CONNECT_TO) {
+            if (msg.getContent().equals(id)) {
+                connectedUserIds.add(msg.getSenderId());
+                System.out.println("User " + msg.getSenderId() + " connected to " + id);
+            } else {
+                // REFINEMENT: If user chose another antenna, remove them from our local list
+                if (connectedUserIds.remove(msg.getSenderId())) {
+                    System.out.println("User " + msg.getSenderId() + " moved to antenna " + msg.getContent());
+                }
+            }
+        }
+        else if (msg.getType() == Message.Type.MESSAGE) {
+            if (connectedUserIds.contains(msg.getReceiverId())) {
+                System.out.println("Delivering message locally to " + msg.getReceiverId());
+                channel.basicPublish(exchangeUser, "user." + msg.getReceiverId(), null, msg.serialize());
+            } else if (id.equals(msg.getOriginalAntennaId())) {
+                sendToMaster(msg);
+            } else {
+                if (msg.getOriginalAntennaId() == null) msg.setOriginalAntennaId(id);
+                sendLeft(msg);
+            }
+        }
     }
 
+    public void sendLeft(Message msg) throws Exception {
+        String routingKey = "antenna." + leftNeighborId;
+        channel.basicPublish(exchangeRing, routingKey, null, msg.serialize());
+    }
 
     public void sendToMaster(Message msg) throws Exception {
         System.out.println("User offline. Sending to Master Antenna storage.");
         channel.basicPublish(masterExchange, "", null, msg.serialize());
     }
-
-
-    private void handleIncomingMessage(Message msg) throws Exception {
-
-        // Case 1: User is connected to THIS antenna
-        if (connectedUsers.containsKey(msg.getReceiverId())) {
-            deliverToUser(msg);
-        } 
-        // Case 2: Message has circled the entire ring (Loop Detection)
-        else if (msg.getOriginalAntennaId().equals(this.id)) {
-            sendToMaster(msg);
-        } 
-        // Case 3: User not here, send to neighbor
-        else {
-            sendRight(msg);
-        }
-    }
-
-
-    // To calculate distance to a user for connection purposes
-    public double euclideanDistance(Point otherPos) {
-        return Math.sqrt(Math.pow(this.position.x - otherPos.x, 2) + 
-                         Math.pow(this.position.y - otherPos.y, 2));
-    }
-
-    public void deliverToUser(Message msg) {
-        User user = connectedUsers.get(msg.getReceiverId());
-        if (user != null) {
-            System.out.println("Delivering locally to user: " + user.getId());
-        }
-    }
-
-    public String getId() { return id; }
-    public Point getPosition() { return position; }
 }
