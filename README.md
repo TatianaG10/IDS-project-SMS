@@ -6,9 +6,13 @@ how to execute:
 ./run.sh to => compiles 
 
 java -cp "class:lib/*" MasterAntennaNode => launch master node
+
 java -cp "class:lib/*" Antenna AntA 0 0 AntB
+
 java -cp "class:lib/*" Antenna AntB 200 0 AntA
+
 java -cp "class:lib/*" User 1 10 10
+
 java -cp "class:lib/*" User 2 200 10
 
 
