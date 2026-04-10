@@ -1,4 +1,4 @@
-import com.rabbitmq.client.*;
+import com.rabbitmq.client.*; 
 import java.awt.Point;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,7 +10,7 @@ public class Antenna {
     private Set<String> connectedUserIds = ConcurrentHashMap.newKeySet();
 
     private String leftNeighborId; 
-    private final Connection connection;
+    private final Connection connection; 
     private final Channel channel;
     
     private final String exchangeRing = "antenna_ring_exchange";
@@ -48,6 +48,10 @@ public class Antenna {
 
         System.out.println("Antenna " + id + " started.");
         listenForMessages(queueName);
+
+        // Broadcast presence for discovery
+        Message discovery = new Message(Message.Type.ANTENNA_REPLY_CONNECT, id, "GUI", "DISCOVERY", position);
+        channel.basicPublish(exchangeBroadcast, "", null, discovery.serialize());
     }
 
     private void listenForMessages(String queueName) throws Exception {
