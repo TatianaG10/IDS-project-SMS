@@ -36,6 +36,7 @@ class AireDeDessin extends JComponent {
 	Image img;
 	Point center;
 
+	
 
 	public AireDeDessin() {
 		// Chargement de l'image de la même manière que le fichier de niveaux
