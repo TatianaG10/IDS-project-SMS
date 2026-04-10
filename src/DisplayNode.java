@@ -1,8 +1,10 @@
-import com.rabbitmq.client.Channel;    // Fixes the "cannot find symbol" errors for channel
-import com.rabbitmq.client.Connection; // Fixes the "incompatible types" error
+import com.rabbitmq.client.Channel;   
+import com.rabbitmq.client.Connection; 
 import com.rabbitmq.client.ConnectionFactory;
 import javax.swing.*;
 import java.awt.*;
+
+
 public class DisplayNode {
     public static void main(String[] args) throws Exception {
         JFrame frame = new JFrame("SMS System Monitor - MoSIG");
@@ -29,36 +31,36 @@ public class DisplayNode {
 
         System.out.println("Monitor Active. Waiting for nodes...");
 
-channel.basicConsume(queueName, true, (tag, del) -> {
-    try {
-        // You must wrap this because deserialize throws Exception
-        Message msg = Message.deserialize(del.getBody());
-        
-                    switch (msg.getType()) {
-                        case WANT_TO_CONNECT:
-                            canvas.updateUser(msg.getSenderId(), msg.getSenderCoordinate(), null);
-                            break;
-                        case CONNECT_TO:
-                            canvas.updateUser(msg.getSenderId(), msg.getSenderCoordinate(), msg.getContent());
-                            canvas.showPopup(msg.getSenderId(), "Connected to " + msg.getContent());
-                            break;
-                        case ANTENNA_REPLY_CONNECT: 
-                            canvas.updateAntenna(msg.getSenderId(), msg.getSenderCoordinate());
-                            break;
-                        case MESSAGE:
-                            canvas.showPopup(msg.getSenderId(), "📤 Sending...");
-                            new Thread(() -> {
-                                try { 
-                                    Thread.sleep(800); 
-                                    canvas.showPopup(msg.getReceiverId(), "📩 Received!"); 
-                                } catch (Exception e) { e.printStackTrace(); }
-                            }).start();
-                            break;
-                    }
-                } catch (Exception e) {
-                    System.err.println("Error deserializing message in DisplayNode: " + e.getMessage());
-                    e.printStackTrace();
-                }
-            }, tag -> {});
+        channel.basicConsume(queueName, true, (tag, del) -> {
+            try {
+
+                Message msg = Message.deserialize(del.getBody());
+                
+                            switch (msg.getType()) {
+                                case WANT_TO_CONNECT:
+                                    canvas.updateUser(msg.getSenderId(), msg.getSenderCoordinate(), null);
+                                    break;
+                                case CONNECT_TO:
+                                    canvas.updateUser(msg.getSenderId(), msg.getSenderCoordinate(), msg.getContent());
+                                    canvas.showPopup(msg.getSenderId(), "Connected to " + msg.getContent());
+                                    break;
+                                case ANTENNA_REPLY_CONNECT: 
+                                    canvas.updateAntenna(msg.getSenderId(), msg.getSenderCoordinate());
+                                    break;
+                                case MESSAGE:
+                                    canvas.showPopup(msg.getSenderId(), "📤 Sending...");
+                                    new Thread(() -> {
+                                        try { 
+                                            Thread.sleep(800); 
+                                            canvas.showPopup(msg.getReceiverId(), "📩 Received!"); 
+                                        } catch (Exception e) { e.printStackTrace(); }
+                                    }).start();
+                                    break;
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error deserializing message in DisplayNode: " + e.getMessage());
+                            e.printStackTrace();
+                        }
+                    }, tag -> {});
     }
 }
