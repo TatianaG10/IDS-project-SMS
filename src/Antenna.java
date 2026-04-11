@@ -52,7 +52,6 @@ public class Antenna {
 
     private void listenForMessages(String queueName) throws Exception {
         channel.basicConsume(queueName, true, (consumerTag, delivery) -> {
-            // ALL checked exceptions must be caught inside this block
             try {
                 Message msg = Message.deserialize(delivery.getBody());
                 handleIncomingMessage(msg);
@@ -64,32 +63,50 @@ public class Antenna {
     }
 
     private void handleIncomingMessage(Message msg) throws Exception {
+        // Rule 1 : Request for connection from user and it is closed enough
         if (msg.getType() == Message.Type.WANT_TO_CONNECT) {
-            if (this.position.distance(msg.getSenderCoordinate()) <= radius) {
+            if (this.position.distance(msg.getSenderCoordinate()) < radius) {
                 Message reply = new Message(Message.Type.ANTENNA_REPLY_CONNECT, id, msg.getSenderId(), "", position);
                 channel.basicPublish(exchangeUser, "user." + msg.getSenderId(), null, reply.serialize());
             }
         } 
+        // Rule 2 : A user confirms us that he/she connect to that antenna
         else if (msg.getType() == Message.Type.CONNECT_TO) {
             if (msg.getContent().equals(id)) {
                 connectedUserIds.add(msg.getSenderId());
                 System.out.println("User " + msg.getSenderId() + " connected to " + id);
-            } else {
-                // REFINEMENT: If user chose another antenna, remove them from our local list
+            } 
+            // Rule 3 : A user confirms us that he/she connect to another antenna
+            else {
                 if (connectedUserIds.remove(msg.getSenderId())) {
                     System.out.println("User " + msg.getSenderId() + " moved to antenna " + msg.getContent());
                 }
             }
         }
+        // MSG handling rules
         else if (msg.getType() == Message.Type.MESSAGE) {
+            // Receiver is in our list
             if (connectedUserIds.contains(msg.getReceiverId())) {
                 System.out.println("Delivering message locally to " + msg.getReceiverId());
                 channel.basicPublish(exchangeUser, "user." + msg.getReceiverId(), null, msg.serialize());
-            } else if (id.equals(msg.getOriginalAntennaId())) {
+            } 
+            // Loop detected (Receiver was not found in the ring)
+            else if (id.equals(msg.getOriginalAntennaId())) {
                 sendToMaster(msg);
-            } else {
+            } 
+            // Receiver not here, send to left
+            else {
                 if (msg.getOriginalAntennaId() == null) msg.setOriginalAntennaId(id);
                 sendLeft(msg);
+            }
+        }
+        // Rule 4 : A user want to confirm that it is indeed connected to us
+        else if (msg.getType() == Message.Type.CHECK_CONNEXION) {
+            if (this.position.distance(msg.getSenderCoordinate()) < radius) {
+                Message ok = new Message(Message.Type.CONNEXION_OK, id, msg.getSenderId(), "", position);
+                channel.basicPublish(exchangeUser, "user." + msg.getSenderId(), null, ok.serialize());
+            } else {
+                connectedUserIds.remove(msg.getSenderId());
             }
         }
     }
